@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>形態素解析用ページ</title>
+<!-- ここにスクリプトを配置-->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.3/jquery.min.js"></script>
+<script>
+$(document).ready(function(){
+  $("#btn01").click(function(res){
+    //ex13.phpのURLを指定
+    var url = "ex13.php";
+    var data = {p:$("#txt01").val()};
+    $.ajax({type:"post", data:data, url:url, dataType:"json", cache:false, success:function(j){
+      var tmp = $("#txt02").html();
+      var txt = "<table border='1'>";
+      $.each(j["ma_result"]["word_list"]["word"], function(i){
+        txt += "<tr><td>" + this["surface"] + "</td><td>" + this["pos"] + "</td></tr>";
+      });
+      txt += "</table>";
+      $("#txt02").html(txt);
+    }}).fail(function(res){
+      $("#txt02").html(res.responseText);
+    });
+  });
+});
+</script>
+</head>
+<body>
+<h1>形態素解析処理</h1>
+<p>テキストに形態素解析を行い，品詞に分解して表示します</p>
+<hr>
+解析するテキスト<br>
+<textarea id="txt01" cols="100" rows="10"></textarea><br>
+<br>
+<input type="button" id="btn01" value="品詞リスト取得"><br>
+形態素解析結果<br>
+<div id="txt02"></div>
+</body>
+</html>

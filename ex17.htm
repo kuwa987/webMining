@@ -1,0 +1,132 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<meta charset="utf-8">
+	<title>RSSテキストを取得して形態素解析</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+	<script src="https://www.gstatic.com/charts/loader.js"></script>
+	<script>
+var limit = 750;
+var gdata;	//グラフ描画用の数値データを保持する変数
+var gval;	//グラフ描画に使うための品詞のカウントを保持する配列
+var gopt;	//グラフの描画オプション
+var chart;	//グラフのオブジェクトを保持する変数
+gval = {"形容詞":0, "形容動詞":0, "感動詞":0, "副詞":0, "連体詞":0, "接続詞":0, "接頭辞":0, "接尾辞":0, "名詞":0, "動詞":0, "助詞":0, "助動詞":0, "特殊":0};		//品詞のカウントを全て0で初期化
+google.charts.load('current', {'packages':['corechart']});		//グラフ用ライブラリのロード処理
+
+//頻度集計用の追加
+var gdata2, gopt2, chart2;			//グラフ用の変数追加
+var gval2 = [{},{},{}];			//★変更箇所：配列を3個にする（配列の中に連想配列×３）
+var n;			//●変更：頻度上位設定用
+
+var rss = [];			//★変更箇所：URLを保存する場所
+rss.push(["科学・医療","http://www3.nhk.or.jp/rss/news/cat3.xml"]);				//★変更箇所
+rss.push(["政治","http://www3.nhk.or.jp/rss/news/cat4.xml"]);					//★変更箇所
+rss.push(["スポーツ","http://www3.nhk.or.jp/rss/news/cat7.xml"]);				//★変更箇所
+
+$(function(){		//画面がロードされたら実行
+	$("#btn01").on("click", function(){		//ボタンがクリックされたら実行
+		$.each(rss, function(x, y){														//★変更箇所：ここで変数rssの数だけ繰り返し
+			$("#txt" + x).val("");		//テキストを表示するエリアを初期化
+			var url = "http://www.shonan.bunkyo.ac.jp/~b6p31035/webmining/0712/ex17.php?url=" +rss[x][1];	//★変更箇所
+			$.ajax({url:url, dataType:"json", cache:false, success:function(j){	//★変更箇所
+				var txt = "";															//★変更箇所
+				$.each(j["item"], function(k, v){ txt += v["description"]; });			//★変更箇所
+				$("#txt" + x).val(txt);
+			}}).fail(function(res){
+				console.log(res);
+			});
+		});
+	});
+	$("#btn02").on("click", function(){		//ボタンクリックのタイミングで実行する部分
+		var p = $("#p").val().split(",");			//●変更：集計する品詞リストを配列に保持
+		var w = $("#w").val().split(",");			//●変更：除外する単語リストを配列に保持
+		n = $("#n").val();							//●変更：集計する上位の件数の設定を保持
+		var url = "http://www.shonan.bunkyo.ac.jp/~b6p31035/webmining/0607/ex13.php";		//形態素解析処理を呼び出すPHPのURL
+		$.each(rss, function(x, y){					//★変更箇所：ここで変数rssの数だけ繰り返し
+	//サイズオーバー対応追加するならここで
+			var tmp = $("#txt" + x).val();			//★変更箇所テキストに変数xを
+			if(tmp.length > limit){
+				$("#txt" + x).val(tmp.substring(limit, tmp.length));			//★変更箇所テキストに変数xを
+				tmp = tmp.substr(0, limit);
+			}else{
+				$("#txt" + x).val("");				//★変更箇所テキストに変数xを
+			}
+			var data = {p:tmp};		//形態素解析のPHPに文をPOSTする
+	//サイズオーバー対応ここまで
+			$.ajax({	//通信処理を呼び出す
+				type:"post", data:data, url:url, dataType:"json", cache:false, success:function(j){		//通信が成功した際の処理
+					$.each(j["ma_result"]["word_list"]["word"], function(i, j){		//PHPから帰ってきたJSONで単語毎に以下を処理
+						gval[this["pos"]]++;			//該当する品詞のカウントを1個ふやす
+						//頻度集計用の追加
+						if(w.indexOf(this["surface"]) == -1){			//●変更：除外ワードでないなら集計する
+							if(p.indexOf(this["pos"]) !== -1){			//●変更：集計対象の品詞なら集計する
+								if(this["pos"] == "名詞"){
+									if(gval2[x][this["surface"]] == undefined) gval2[x][this["surface"]] = 0;	//★変更箇所テキストに変数xを
+									gval2[x][this["surface"]]++;												//★変更箇所テキストに変数xを
+								}
+							}
+						}
+					});
+					drawChart(); //処理結果の代わりにグラフを出す
+					drawChart2(x); //処理結果の代わりにグラフを出す				★変更箇所引数に変数xを
+				}
+			}).fail(function(res){		//通信が失敗した場合
+				console.log(res);
+			});
+		});											//★変更箇所：繰り返しの終わり部分
+	});
+});
+
+function drawChart(){			//グラフ描画用の関数
+	gdata = new google.visualization.DataTable();			//グラフのデータ保持用のオブジェクトを新規に作る
+	gdata.addColumn("string", "品詞");						//データに列を追加（品詞のテキスト）
+	gdata.addColumn("number", "出現数");					//データに列を追加（品詞のカウント）
+	gopt = {"title":"品詞の比率", "width":400, "height":300};	//グラフのオプション、タイトルと縦横幅
+	$.each(gval, function(i){		//品詞を集計した配列からgdataに値を流し込む（↑で作った2列、品詞とカウント）
+		gdata.addRow([i, gval[i]]);		//品詞とカウントをセットで1行に、品詞の数だけ繰り返し
+	});
+	chart = new google.visualization.PieChart($("#g")[0]);	//グラフを作成（DIVタグと関連付け）
+	chart.draw(gdata, gopt);		//グラフの描画処理
+}
+function drawChart2(x){			//グラフ描画用の関数			★変更箇所引数に変数xを
+	gdata2 = new google.visualization.DataTable();			//グラフのデータ保持用のオブジェクトを新規に作る
+	gdata2.addColumn("string", "単語");						//データに列を追加（品詞のテキスト）
+	gdata2.addColumn("number", "出現数");					//データに列を追加（品詞のカウント）
+	gopt2 = {"title":"単語頻出上位10", "width":200, "height":300};	//グラフのオプション、タイトルと縦横幅
+	var tmp = [];
+	for(var i in gval2[x]) tmp.push({key:i, val:gval2[x][i]});	//★変更箇所配列の参照に変数xを
+	tmp.sort(function(a, b){ return(b.val - a.val) });
+	$.each(tmp, function(i){		//品詞を集計した配列からgdataに値を流し込む（↑で作った2列、品詞とカウント）
+		//●頻度上位の設定を適用
+		if(i < n) gdata2.addRow([tmp[i].key, tmp[i].val]);		//品詞とカウントをセットで1行に、品詞の数だけ繰り返し
+	});
+	char2t = new google.visualization.BarChart($("#g" + x)[0]);	//グラフを作成（DIVタグと関連付け）	★変更箇所グラフに変数xを
+	char2t.draw(gdata2, gopt2);		//グラフの描画処理
+}
+
+	</script>
+</head>
+<body>
+	<h1>RSSからテキストを取得して形態素解析</h1>
+	<hr>
+	<button id="btn01">テキスト取得</button><br>
+	<textarea id="txt0" cols="30" rows="5"></textarea>
+	<textarea id="txt1" cols="30" rows="5"></textarea>
+	<textarea id="txt2" cols="30" rows="5"></textarea>
+	<br>
+	<!-- ●●HTMLの変更箇所 -->
+	頻度上位表示：<input type="text" id="n" value="15"><br>
+	除外ワード：<textarea id="w" cols="100" rows="1">１,２,３,４,５,６,７,８,９,０,1,2,3,4,5,6,7,8,9,こと</textarea><br>
+	集計する品詞：<textarea id="p" cols="100" rows="1">名詞,動詞</textarea><br>
+	<!-- ●●HTMLの変更箇所 -->
+	<br>
+	<button id="btn02">品詞リスト取得</button><br>
+	<table><tr>
+	<td><div id="g"></div></td>
+	<td><div id="g0"></div></td>
+	<td><div id="g1"></div></td>
+	<td><div id="g2"></div></td>
+	</tr></table>
+</body>
+</html>

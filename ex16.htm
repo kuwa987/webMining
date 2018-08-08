@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+	<meta charset="utf-8">
+	<title>Webページからテキストを取得して形態素解析</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+	<script src="https://www.gstatic.com/charts/loader.js"></script>		<!--  グラフ用にここ追加 -->
+	<script>
+var limit = 750;
+var gdata;	//グラフ描画用の数値データを保持する変数
+var gval;	//グラフ描画に使うための品詞のカウントを保持する配列
+var gopt;	//グラフの描画オプション
+var chart;	//グラフのオブジェクトを保持する変数
+
+var gdata2;	//グラフ描画用の数値データを保持する変数
+var gval2;	//グラフ描画に使うための品詞のカウントを保持する配列
+var gopt2;	//グラフの描画オプション
+var chart2;	//グラフのオブジェクトを保持する変数
+
+var arr = [];
+
+gval = {"形容詞":0, "形容動詞":0, "感動詞":0, "副詞":0, "連体詞":0, "接続詞":0, "接頭辞":0, "接尾辞":0, "名詞":0, "動詞":0, "助詞":0, "助動詞":0, "特殊":0};		//品詞のカウントを全て0で初期化
+gval2 = {};
+google.charts.load('current', {'packages':['corechart']});		//グラフ用ライブラリのロード処理
+
+$(function(){		//画面がロードされたら実行
+	$("#btn01").on("click", function(){		//ボタンがクリックされたら実行
+		$("#txt01").val("");		//テキストを表示するエリアを初期化
+		var url = "http://www.shonan.bunkyo.ac.jp/~b6p31035/webmining/0614/ex14.php?url=" + $("#url").val();	//テキスト取得PHPを呼ぶ
+		$.ajax({url:url, cache:false, success:function(res){	//通信が成功したら
+			var response = res;
+			response = res.replace(/\s|　|/g, "");
+			$("#txt01").val(response);
+		}}).fail(function(res){
+			console.log(res);
+		});
+	});
+	$("#btn02").on("click", function(){		//ボタンクリックのタイミングで実行する部分
+		var url = "http://www.shonan.bunkyo.ac.jp/~b6p31035/webmining/0607/ex13.php";		//形態素解析処理を呼び出すPHPのURL
+//サイズオーバー対応追加するならここで
+		var tmp = $("#txt01").val();
+		if(tmp.length > limit){
+			$("#txt01").val(tmp.substring(limit, tmp.length));
+			tmp = tmp.substr(0, limit);
+		}else{
+			$("#txt01").val("");
+		}
+		var data = {p:tmp};		//形態素解析のPHPに文をPOSTする
+//サイズオーバー対応ここまで
+		$.ajax({	//通信処理を呼び出す
+			type:"post", data:data, url:url, dataType:"json", cache:false, success:function(j){		//通信が成功した際の処理
+				var html = "<table border='1'>";		//形態素解析結果用のHTMLの最初の部分
+				$.each(j["ma_result"]["word_list"]["word"], function(i, j){		//PHPから帰ってきたJSONで単語毎に以下を処理
+					html += "<tr><td>" + this["surface"] + "</td><td>" + this["pos"] + "</td></tr>";	//表の1列（単語毎に）
+					gval[this["pos"]]++;			//該当する品詞のカウントを1個ふやす
+
+					if(gval2[this["surface"]] == undefined) {
+						gval2[this["surface"]] = 0;
+					}
+					gval2[this["surface"]]++;
+				});
+				html += "</table>";	//テーブル終わり
+//				$("#txt02").append(html);		//処理した結果を画面に表示
+				drawChart(); //処理結果の代わりにグラフを出す
+				drawChart2(); //処理結果の代わりにグラフを出す
+			}
+		}).fail(function(res){		//通信が失敗した場合
+			$("#txt02").html(res.responseText);
+		});
+	});
+});
+
+function drawChart(){			//グラフ描画用の関数
+	gdata = new google.visualization.DataTable();			//グラフのデータ保持用のオブジェクトを新規に作る
+	gdata.addColumn("string", "品詞");						//データに列を追加（品詞のテキスト）
+	gdata.addColumn("number", "出現数");					//データに列を追加（品詞のカウント）
+	gopt = {"title":"品詞の比率", "width":400, "height":300};	//グラフのオプション、タイトルと縦横幅
+	$.each(gval, function(i){		//品詞を集計した配列からgdataに値を流し込む（↑で作った2列、品詞とカウント）
+		gdata.addRow([i, gval[i]]);		//品詞とカウントをセットで1行に、品詞の数だけ繰り返し
+	});
+	chart = new google.visualization.PieChart(document.getElementById("g"));	//グラフを作成（DIVタグと関連付け）
+	chart.draw(gdata, gopt);		//グラフの描画処理
+}
+
+function drawChart2(){			//グラフ描画用の関数
+	gdata2 = new google.visualization.DataTable();			//グラフのデータ保持用のオブジェクトを新規に作る
+	gdata2.addColumn("string", "単語");						//データに列を追加（品詞のテキスト）
+	gdata2.addColumn("number", "出現数");					//データに列を追加（品詞のカウント）
+	gopt2 = {"title":"単語の頻出上位リスト", "width":400, "height":300};	//グラフのオプション、タイトルと縦横幅
+
+	for(var i in gval2) arr.push({key:i, val:gval2[i]});
+	arr.sort(function(a, b){
+		return(b.val - a.val);
+	});
+//	console.log(gval2); //デバッグ用
+//	console.log(arr);   //デバッグ用
+
+	var count = 0;
+	$.each(arr, function(i){		//品詞を集計した配列からgdataに値を流し込む（↑で作った2列、品詞とカウント）
+		if(count == 10){ //10回だけ流し込む
+			return false;
+		}
+
+		gdata2.addRow([arr[i].key, arr[i].val]);		//品詞とカウントをセットで1行に、品詞の数だけ繰り返し
+		count++;
+	});
+	chart = new google.visualization.BarChart(document.getElementById("g2"));	//グラフを作成（DIVタグと関連付け）
+	chart.draw(gdata2, gopt2);		//グラフの描画処理
+}
+
+/*
+課題をやるにあたって参考にしたページ
+https://stackoverflow.com/questions/17152770/google-charts-addrows-function-does-not-want-to-accept-an-array
+https://developers.google.com/chart/interactive/docs/reference
+
+*/
+	</script>
+</head>
+<body>
+	<h1>Webページからテキストを取得して形態素解析</h1>
+	<p>最初にテキストボックスにURLを入力してテキスト取得ボタンを選択するとそのページからテキストが取得できますので、テキストを取得した後に形態素解析処理結果を表示します</p>
+	<hr>
+	URL:<input type="url" id="url" style="width:500px;" value="http://www.bunkyo.ac.jp/faculty/fac-info/information-systems/"><br>
+	<button id="btn01">テキスト取得</button><br>
+	<textarea id="txt01" cols="100" rows="10"></textarea><br>
+	<button id="btn02">品詞リスト取得</button><br>
+	<div id="txt02"></div>
+	<div id="g"></div>
+	<div id="g2"></div>
+</body>
+</html>

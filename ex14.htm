@@ -1,0 +1,64 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>WEBページからテキストを取得して形態素解析</title>
+<!-- ここにスクリプトを配置-->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+
+<script>
+var limit = 750;
+$(function(){
+	$("#btn01").on("click", function(){
+		$("#txt01").val("");
+		var url = "http://www.shonan.bunkyo.ac.jp/~b6p31035/webmining/0614/ex14.php?url=" + $("#url").val();
+		$.ajax({url:url, cache:false, success:function(res){
+			var response = res;
+			response = res.replace(/\s|　|/g, "");
+			$("#txt01").val(response);
+		}}).fail(function(res){
+			console.log(res);
+		});
+	});
+	$("#btn02").on("click", function(){		//ボタンクリックのタイミングで実行する部分
+		var url = "http://www.shonan.bunkyo.ac.jp/~b6p31035/webmining/0607/ex13.php";		//形態素解析処理を呼び出すPHPのURL(ex13.php)
+//サイズオーバー対応追加するならここで
+		var tmp = $("#txt01").val();
+		if(tmp.length > limit){
+			$("#txt01").val(tmp.substring(limit, tmp.length));
+			tmp = tmp.substr(0, limit);
+		}else{
+			$("#txt01").val("");
+		}
+		var data = {p:tmp};		//形態素解析のPHPに文をPOSTする
+//サイズオーバー対応ここまで
+		$.ajax({	//通信処理を呼び出す
+			type:"post", data:data, url:url, dataType:"json", cache:false, success:function(j){		//通信が成功した際の処理
+				var html = "<table border='1'>";		//形態素解析結果用のHTMLの最初の部分
+				$.each(j["ma_result"]["word_list"]["word"], function(i, j){		//PHPから帰ってきたJSONで単語毎に以下を処理
+					html += "<tr><td>" + this["surface"] + "</td><td>" + this["pos"] + "</td></tr>";	//表の1列（単語毎に）
+				});
+				html += "</table>";	//テーブル終わり
+				$("#txt02").append(html);		//処理した結果を画面に表示
+			}
+		}).fail(function(res){		//通信が失敗した場合
+			$("#txt02").html(res.responseText);
+		});
+	});
+});
+</script>
+</head>
+<body>
+<h1>ウェブページからテキストを取得して形態素解析</h1>
+<p>最初にテキストボックスに特定のWebページのURLを指定するとそのページのソースコードからタグを除いたテキスト情報を取得します．次にその
+テキストに形態素解析を行い，品詞に分解して表示します</p>
+<hr>
+URL:<input type="url" id="url" style="width:500px;" value="http://www.bunkyo.ac.jp/faculty/fac-info/information-systems/">
+<br>
+<input type="button" id="btn01" value="テキスト取得"><br>
+取得したテキスト部分<br>
+<textarea id="txt01" cols="100" rows="10"></textarea><br>
+<br>
+<input type="button" id="btn02" value="品詞リスト取得"><br>
+形態素解析<br>
+<div id="txt02"></div>
